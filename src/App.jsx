@@ -16,7 +16,7 @@ import PinLockModal from './components/PinLockModal';
 import { AuthService } from './services/authService';
 
 export default function App() {
-  const [showSplash, setShowSplash] = useState(true); // Show Logo Intro on App Launch
+  const [showSplash, setShowSplash] = useState(false); // Start directly on Login Page
   const [isPinLocked, setIsPinLocked] = useState(() => !!localStorage.getItem('auramind_app_pin_hash'));
   const [activeTab, setActiveTab] = useState('home');
   const [isCrisisOpen, setIsCrisisOpen] = useState(false);

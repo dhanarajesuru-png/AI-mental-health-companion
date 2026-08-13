@@ -11,12 +11,6 @@ export default function LoginPage({ onLoginSuccess }) {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const fillDemoCredentials = () => {
-    setEmail('user@auramind.org');
-    setPassword('AuraMind2026!');
-    setError(null);
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
@@ -205,7 +199,7 @@ export default function LoginPage({ onLoginSuccess }) {
                   required
                   className="input-field"
                   style={{ paddingLeft: '2.6rem' }}
-                  placeholder="user@auramind.org"
+                  placeholder="name@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
