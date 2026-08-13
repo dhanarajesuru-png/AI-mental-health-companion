@@ -30,33 +30,11 @@ export async function getDatabaseHandle() {
 
   console.log('⚡ SQLite Database Engine Initialized (auramind.db)');
 
-  // Auto-migrate legacy users.json data if present
+  // Auto-clean any legacy default demo accounts
   try {
-    const userCountResult = await dbInstance.get('SELECT COUNT(*) as count FROM users');
-    if (userCountResult.count === 0) {
-      if (fs.existsSync(USERS_JSON_FILE)) {
-        const raw = fs.readFileSync(USERS_JSON_FILE, 'utf8');
-        const legacyUsers = JSON.parse(raw);
-
-        for (const u of legacyUsers) {
-          await dbInstance.run(
-            `INSERT OR IGNORE INTO users (id, name, email, password, createdAt) VALUES (?, ?, ?, ?, ?)`,
-            [u.id, u.name, u.email.toLowerCase(), u.password, u.createdAt || new Date().toISOString()]
-          );
-        }
-        console.log(`📦 SQLite Migration: Migrated ${legacyUsers.length} user accounts from users.json to auramind.db`);
-      } else {
-        // Seed default demo user
-        const hashedPassword = await bcrypt.hash('AuraMind2026!', 10);
-        await dbInstance.run(
-          `INSERT INTO users (id, name, email, password, createdAt) VALUES (?, ?, ?, ?, ?)`,
-          ['usr_demo_01', 'Alex Johnson', 'user@auramind.org', hashedPassword, new Date().toISOString()]
-        );
-        console.log('✅ SQLite Database: Seeded default demo user (user@auramind.org)');
-      }
-    }
-  } catch (err) {
-    console.error('SQLite initialization/migration error:', err);
+    await dbInstance.run(`DELETE FROM users WHERE email = 'user@auramind.org' OR id = 'usr_demo_01'`);
+  } catch (e) {
+    // Ignore error if table is clean
   }
 
   return dbInstance;

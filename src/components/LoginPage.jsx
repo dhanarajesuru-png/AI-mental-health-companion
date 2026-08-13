@@ -5,8 +5,9 @@ import { AuthService } from '../services/authService';
 export default function LoginPage({ onLoginSuccess }) {
   const [mode, setMode] = useState('login'); // 'login' or 'signup'
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => AuthService.getRememberedEmail());
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -18,10 +19,10 @@ export default function LoginPage({ onLoginSuccess }) {
 
     try {
       if (mode === 'login') {
-        const result = await AuthService.login(email, password);
+        const result = await AuthService.login(email, password, rememberMe);
         onLoginSuccess(result.user);
       } else {
-        const result = await AuthService.register(name, email, password);
+        const result = await AuthService.register(name, email, password, rememberMe);
         onLoginSuccess(result.user);
       }
     } catch (err) {
@@ -229,6 +230,19 @@ export default function LoginPage({ onLoginSuccess }) {
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
+            </div>
+
+            {/* Remember Me Checkbox */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0.1rem 0' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.83rem', color: '#94a3b8', cursor: 'pointer' }}>
+                <input 
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  style={{ accentColor: '#0ea5e9', width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+                Remember me on this device
+              </label>
             </div>
 
             <button 
