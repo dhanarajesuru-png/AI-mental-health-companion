@@ -3,12 +3,56 @@
  * Enforces mandatory user authentication and handles Remember Me session persistence.
  */
 
-const API_BASE = '/api/auth';
+const BACKEND_URL = 'http://localhost:5000/api/auth';
+const RELATIVE_URL = '/api/auth';
 const TOKEN_KEY = 'auramind_auth_token';
 const USER_KEY = 'auramind_auth_user';
 const REMEMBERED_EMAIL_KEY = 'auramind_remembered_email';
 
 export class AuthService {
+  /**
+   * Helper method to send authentication POST requests safely with fallbacks
+   */
+  static async postAuth(endpoint, payload) {
+    let response;
+    let url = `${BACKEND_URL}/${endpoint}`;
+
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch (err) {
+      // Retry with relative URL if direct backend URL fetch failed
+      try {
+        url = `${RELATIVE_URL}/${endpoint}`;
+        response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      } catch (retryErr) {
+        throw new Error("Unable to connect to authentication server. Please check your network connection.");
+      }
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+    let data;
+
+    if (contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      throw new Error("Invalid response from server. Please verify your credentials or register a new account.");
+    }
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Authentication error occurred.');
+    }
+
+    return data;
+  }
+
   /**
    * Get currently authenticated user from localStorage or sessionStorage.
    * Returns null if unauthenticated (strictly forcing login).
@@ -49,17 +93,7 @@ export class AuthService {
    * Login user via Express/SQLite backend and save session based on rememberMe option
    */
   static async login(email, password, rememberMe = true) {
-    const response = await fetch(`${API_BASE}/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || 'Login failed. Please check your credentials.');
-    }
+    const data = await this.postAuth('login', { email, password });
 
     if (rememberMe) {
       localStorage.setItem(TOKEN_KEY, data.token);
@@ -78,17 +112,7 @@ export class AuthService {
    * Register user via Express/SQLite backend and save session
    */
   static async register(name, email, password, rememberMe = true) {
-    const response = await fetch(`${API_BASE}/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password })
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || 'Registration failed.');
-    }
+    const data = await this.postAuth('register', { name, email, password });
 
     if (rememberMe) {
       localStorage.setItem(TOKEN_KEY, data.token);
@@ -113,4 +137,5 @@ export class AuthService {
     sessionStorage.removeItem(USER_KEY);
   }
 }
+
 
