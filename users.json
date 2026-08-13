@@ -1,0 +1,16 @@
+[
+  {
+    "id": "usr_demo_01",
+    "name": "Alex Johnson",
+    "email": "user@auramind.org",
+    "password": "$2a$10$DwtgPgp8lky0SDzVV22W/u24znX0z.saHUuhrADa.vuWidYlnO.ce",
+    "createdAt": "2026-08-11T10:51:25.748Z"
+  },
+  {
+    "id": "usr_1786445716087",
+    "name": "dhanaraj",
+    "email": "dhanarajesuru@gmail.com",
+    "password": "$2a$10$bO6cJwbUud3oazmVGL9HPePfeFmgolAn1A3cZ1uDfo4eWeSN9OO1.",
+    "createdAt": "2026-08-11T10:55:16.087Z"
+  }
+]
