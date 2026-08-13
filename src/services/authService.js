@@ -1,138 +1,213 @@
 /**
- * Persistent Authentication Service for Node.js Express & SQLite Backend
- * Enforces mandatory user authentication and handles Remember Me session persistence.
+ * AuraMind Authentication Service
+ *
+ * Dual-mode auth:
+ *  - LOCAL (localhost / LAN): Uses Express + SQLite backend on port 5000
+ *  - PRODUCTION (Vercel / deployed): Uses client-side localStorage auth with
+ *    SHA-256 password hashing via crypto-js (no server required)
  */
 
-const getBackendUrl = () => {
-  const host = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
-  return `http://${host}:5000/api/auth`;
-};
-const RELATIVE_URL = '/api/auth';
+import CryptoJS from 'crypto-js';
+
 const TOKEN_KEY = 'auramind_auth_token';
 const USER_KEY = 'auramind_auth_user';
 const REMEMBERED_EMAIL_KEY = 'auramind_remembered_email';
+const LOCAL_USERS_KEY = 'auramind_users_db';
+
+// Detect if running locally with backend available
+function isLocalDev() {
+  const host = typeof window !== 'undefined' ? window.location.hostname : '';
+  return host === 'localhost' || host === '127.0.0.1' || /^192\.168\.|^10\.|^172\.(1[6-9]|2[0-9]|3[01])\./.test(host);
+}
+
+// ============================================================
+// CLIENT-SIDE AUTH HELPERS (used in production / Vercel)
+// ============================================================
+
+function hashPassword(password) {
+  return CryptoJS.SHA256(password + 'auramind_salt_2026').toString();
+}
+
+function getLocalUsersDb() {
+  try {
+    const raw = localStorage.getItem(LOCAL_USERS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveLocalUsersDb(db) {
+  localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(db));
+}
+
+function generateToken(user) {
+  // Simple signed token for client-side — not JWT but sufficient for SPA
+  const payload = btoa(JSON.stringify({ id: user.id, email: user.email, name: user.name, ts: Date.now() }));
+  const sig = CryptoJS.SHA256(payload + 'auramind_jwt_secret_2026').toString().substring(0, 16);
+  return `${payload}.${sig}`;
+}
+
+function clientRegister(name, email, password) {
+  const db = getLocalUsersDb();
+  const normalizedEmail = email.toLowerCase().trim();
+
+  if (db[normalizedEmail]) {
+    throw new Error('An account with this email already exists.');
+  }
+  if (!name || !email || !password) {
+    throw new Error('Name, email, and password are required.');
+  }
+  if (password.length < 4) {
+    throw new Error('Password must be at least 4 characters long.');
+  }
+
+  const userId = `usr_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const user = { id: userId, name: name.trim(), email: normalizedEmail, password: hashPassword(password), createdAt: new Date().toISOString() };
+  db[normalizedEmail] = user;
+  saveLocalUsersDb(db);
+
+  return { user: { id: userId, name: user.name, email: normalizedEmail }, token: generateToken(user) };
+}
+
+function clientLogin(email, password) {
+  const db = getLocalUsersDb();
+  const normalizedEmail = email.toLowerCase().trim();
+  const user = db[normalizedEmail];
+
+  if (!user) {
+    throw new Error('No account found with this email. Please sign up first.');
+  }
+  if (user.password !== hashPassword(password)) {
+    throw new Error('Incorrect password. Please try again.');
+  }
+
+  return { user: { id: user.id, name: user.name, email: normalizedEmail }, token: generateToken(user) };
+}
+
+// ============================================================
+// BACKEND AUTH HELPERS (used in local dev)
+// ============================================================
+
+async function backendAuth(endpoint, payload) {
+  const host = window.location.hostname;
+  const url = `http://${host}:5000/api/auth/${endpoint}`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    throw new Error('Server returned an unexpected response. Please try again.');
+  }
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Authentication failed.');
+  }
+
+  return data;
+}
+
+// ============================================================
+// AUTH SERVICE CLASS
+// ============================================================
 
 export class AuthService {
   /**
-   * Helper method to send authentication POST requests safely with fallbacks
-   */
-  static async postAuth(endpoint, payload) {
-    let response;
-    let url = `${getBackendUrl()}/${endpoint}`;
-
-    try {
-      response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-    } catch (err) {
-      // Retry with relative URL if direct backend URL fetch failed
-      try {
-        url = `${RELATIVE_URL}/${endpoint}`;
-        response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-      } catch (retryErr) {
-        throw new Error("Unable to connect to authentication server. Please check your network connection.");
-      }
-    }
-
-    const contentType = response.headers.get('content-type') || '';
-    let data;
-
-    if (contentType.includes('application/json')) {
-      data = await response.json();
-    } else {
-      throw new Error("Invalid response from server. Please verify your credentials or register a new account.");
-    }
-
-    if (!response.ok) {
-      throw new Error(data.error || 'Authentication error occurred.');
-    }
-
-    return data;
-  }
-
-  /**
    * Get currently authenticated user from localStorage or sessionStorage.
-   * Returns null if unauthenticated (strictly forcing login).
    */
   static getCurrentUser() {
     try {
       const localUser = localStorage.getItem(USER_KEY);
-      if (localUser) {
-        return JSON.parse(localUser);
-      }
-
+      if (localUser) return JSON.parse(localUser);
       const sessionUser = sessionStorage.getItem(USER_KEY);
-      if (sessionUser) {
-        return JSON.parse(sessionUser);
-      }
-
+      if (sessionUser) return JSON.parse(sessionUser);
       return null;
-    } catch (err) {
+    } catch {
       return null;
     }
   }
 
-  /**
-   * Get active JWT Token
-   */
   static getToken() {
     return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY) || null;
   }
 
-  /**
-   * Get pre-saved email for "Remember Me" input pre-filling
-   */
   static getRememberedEmail() {
     return localStorage.getItem(REMEMBERED_EMAIL_KEY) || '';
   }
 
+  static _saveSession(user, token, rememberMe, email) {
+    const store = rememberMe ? localStorage : sessionStorage;
+    const clear = rememberMe ? sessionStorage : localStorage;
+    store.setItem(TOKEN_KEY, token);
+    store.setItem(USER_KEY, JSON.stringify(user));
+    if (rememberMe) {
+      localStorage.setItem(REMEMBERED_EMAIL_KEY, email);
+    } else {
+      localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+    }
+  }
+
   /**
-   * Login user via Express/SQLite backend and save session based on rememberMe option
+   * Login — uses backend locally, client-side on production
    */
   static async login(email, password, rememberMe = true) {
-    const data = await this.postAuth('login', { email, password });
+    let user, token;
 
-    if (rememberMe) {
-      localStorage.setItem(TOKEN_KEY, data.token);
-      localStorage.setItem(USER_KEY, JSON.stringify(data.user));
-      localStorage.setItem(REMEMBERED_EMAIL_KEY, email);
+    if (isLocalDev()) {
+      try {
+        const data = await backendAuth('login', { email, password });
+        user = data.user;
+        token = data.token;
+      } catch (backendErr) {
+        // Backend unreachable locally → fall through to client-side
+        const result = clientLogin(email, password);
+        user = result.user;
+        token = result.token;
+      }
     } else {
-      sessionStorage.setItem(TOKEN_KEY, data.token);
-      sessionStorage.setItem(USER_KEY, JSON.stringify(data.user));
-      localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+      // Production / Vercel
+      const result = clientLogin(email, password);
+      user = result.user;
+      token = result.token;
     }
 
-    return { success: true, user: data.user, token: data.token };
+    this._saveSession(user, token, rememberMe, email);
+    return { success: true, user, token };
   }
 
   /**
-   * Register user via Express/SQLite backend and save session
+   * Register — uses backend locally, client-side on production
    */
   static async register(name, email, password, rememberMe = true) {
-    const data = await this.postAuth('register', { name, email, password });
+    let user, token;
 
-    if (rememberMe) {
-      localStorage.setItem(TOKEN_KEY, data.token);
-      localStorage.setItem(USER_KEY, JSON.stringify(data.user));
-      localStorage.setItem(REMEMBERED_EMAIL_KEY, email);
+    if (isLocalDev()) {
+      try {
+        const data = await backendAuth('register', { name, email, password });
+        user = data.user;
+        token = data.token;
+      } catch (backendErr) {
+        // Backend unreachable locally → fall through to client-side
+        const result = clientRegister(name, email, password);
+        user = result.user;
+        token = result.token;
+      }
     } else {
-      sessionStorage.setItem(TOKEN_KEY, data.token);
-      sessionStorage.setItem(USER_KEY, JSON.stringify(data.user));
-      localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+      // Production / Vercel
+      const result = clientRegister(name, email, password);
+      user = result.user;
+      token = result.token;
     }
 
-    return { success: true, user: data.user, token: data.token };
+    this._saveSession(user, token, rememberMe, email);
+    return { success: true, user, token };
   }
 
-  /**
-   * Logout user and clear active tokens
-   */
   static logout() {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
@@ -140,5 +215,3 @@ export class AuthService {
     sessionStorage.removeItem(USER_KEY);
   }
 }
-
-
