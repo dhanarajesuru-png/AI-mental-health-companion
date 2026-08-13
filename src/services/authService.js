@@ -3,7 +3,10 @@
  * Enforces mandatory user authentication and handles Remember Me session persistence.
  */
 
-const BACKEND_URL = 'http://localhost:5000/api/auth';
+const getBackendUrl = () => {
+  const host = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
+  return `http://${host}:5000/api/auth`;
+};
 const RELATIVE_URL = '/api/auth';
 const TOKEN_KEY = 'auramind_auth_token';
 const USER_KEY = 'auramind_auth_user';
@@ -15,7 +18,7 @@ export class AuthService {
    */
   static async postAuth(endpoint, payload) {
     let response;
-    let url = `${BACKEND_URL}/${endpoint}`;
+    let url = `${getBackendUrl()}/${endpoint}`;
 
     try {
       response = await fetch(url, {
