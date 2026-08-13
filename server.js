@@ -2,20 +2,21 @@ import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import fs from 'fs';
-import path from 'path';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import { getUserByEmail, getUserById, createUser, getTotalUsersCount, getDatabaseHandle } from './db.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = 'auramind_jwt_secure_secret_2026';
-const USERS_FILE = path.join(process.cwd(), 'users.json');
 
-// Apply security headers
+// Apply security headers & middleware
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
+
+// Initialize SQLite DB connection on launch
+getDatabaseHandle();
 
 // Auth rate limiter to prevent brute force
 const authLimiter = rateLimit({
@@ -28,54 +29,23 @@ const authLimiter = rateLimit({
 
 app.use('/api/auth/', authLimiter);
 
-// Load or initialize persistent user database
-let users = [];
-
-const loadUsers = async () => {
-  try {
-    if (fs.existsSync(USERS_FILE)) {
-      const data = fs.readFileSync(USERS_FILE, 'utf8');
-      users = JSON.parse(data);
-      console.log(`✅ Node.js Auth Server: Loaded ${users.length} persistent user accounts from users.json`);
-    } else {
-      const hashedPassword = await bcrypt.hash('AuraMind2026!', 10);
-      users = [{
-        id: 'usr_demo_01',
-        name: 'Alex Johnson',
-        email: 'user@auramind.org',
-        password: hashedPassword,
-        createdAt: new Date().toISOString()
-      }];
-      fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-      console.log('✅ Node.js Auth Server: Persistent demo user initialized (user@auramind.org)');
-    }
-  } catch (err) {
-    console.error('Error loading users.json:', err);
-    users = [];
-  }
-};
-
-const saveUsers = () => {
-  try {
-    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-  } catch (err) {
-    console.error('Error saving users.json:', err);
-  }
-};
-
-loadUsers();
-
 // Health Check Endpoint
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'AuraMind Persistent Auth Service',
-    totalUsers: users.length,
-    timestamp: new Date().toISOString()
-  });
+app.get('/api/health', async (req, res) => {
+  try {
+    const totalUsers = await getTotalUsersCount();
+    res.json({
+      status: 'ok',
+      service: 'AuraMind SQLite Database Auth Service',
+      database: 'auramind.db',
+      totalUsers,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
-// Register Endpoint
+// Register Endpoint (SQLite Database Connected)
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -84,27 +54,27 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'Name, email, and password are required.' });
     }
 
-    const existingUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    const existingUser = await getUserByEmail(email);
     if (existingUser) {
-      return res.status(400).json({ error: 'An account with this email already exists.' });
+      return res.status(400).json({ error: 'An account with this email already exists in the database.' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const newUser = {
-      id: `usr_${Date.now()}`,
-      name,
-      email: email.toLowerCase(),
-      password: hashedPassword,
-      createdAt: new Date().toISOString()
-    };
+    const userId = `usr_${Date.now()}`;
+    const createdAt = new Date().toISOString();
 
-    users.push(newUser);
-    saveUsers();
+    const newUser = await createUser({
+      id: userId,
+      name,
+      email,
+      password: hashedPassword,
+      createdAt
+    });
 
     const token = jwt.sign({ id: newUser.id, email: newUser.email }, JWT_SECRET, { expiresIn: '365d' });
 
     res.status(201).json({
-      message: 'Account created and saved permanently',
+      message: 'Account created and saved in SQLite database',
       token,
       user: {
         id: newUser.id,
@@ -118,7 +88,7 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-// Login Endpoint
+// Login Endpoint (SQLite Database Connected)
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -127,7 +97,7 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required.' });
     }
 
-    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    const user = await getUserByEmail(email);
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
@@ -154,8 +124,8 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// Get Current Profile Endpoint
-app.get('/api/auth/me', (req, res) => {
+// Get Current Profile Endpoint (SQLite Database Connected)
+app.get('/api/auth/me', async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -165,9 +135,9 @@ app.get('/api/auth/me', (req, res) => {
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, JWT_SECRET);
 
-    const user = users.find(u => u.id === decoded.id);
+    const user = await getUserById(decoded.id);
     if (!user) {
-      return res.status(404).json({ error: 'User not found.' });
+      return res.status(404).json({ error: 'User not found in database.' });
     }
 
     res.json({
@@ -183,5 +153,6 @@ app.get('/api/auth/me', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 AuraMind Persistent Auth Server running on http://localhost:${PORT}`);
+  console.log(`🚀 AuraMind SQLite Database Auth Server running on http://localhost:${PORT}`);
 });
+
