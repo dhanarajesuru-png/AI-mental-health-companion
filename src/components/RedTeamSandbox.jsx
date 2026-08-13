@@ -178,7 +178,7 @@ export default function RedTeamSandbox() {
                         "{p.input}"
                       </p>
                       <span style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '0.2rem', display: 'block' }}>
-                        Target: <code style={{ color: '#f43f5e' }}>{p.expectedAction}</code> • {p.notes}
+                        {p.notes}
                       </span>
                     </div>
 
