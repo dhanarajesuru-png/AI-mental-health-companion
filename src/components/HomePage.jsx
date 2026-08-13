@@ -19,10 +19,17 @@ import { StorageService } from '../services/storageService';
 export default function HomePage({ currentUser, onSelectModule, onOpenCrisisModal }) {
   const moodLogs = StorageService.getMoodLogs();
   const memories = StorageService.getMemorySummaries();
+  const guardrailStats = StorageService.getGuardrailStats();
 
-  const avgScore = moodLogs.length 
+  // Avg mood score: only computed from real logged data, never a default
+  const avgScore = moodLogs.length
     ? (moodLogs.reduce((acc, curr) => acc + curr.score, 0) / moodLogs.length).toFixed(1)
-    : '6.8';
+    : null;
+
+  // RAG guardrail pass rate: only from real Red-Team test runs
+  const guardrailLabel = guardrailStats
+    ? `${Math.round((guardrailStats.passed / guardrailStats.total) * 100)}% Pass`
+    : null;
 
   const modules = [
     {
@@ -119,9 +126,13 @@ export default function HomePage({ currentUser, onSelectModule, onOpenCrisisModa
         {/* Quick KPI Overview Stat Bar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
           
-          <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '0.85rem 1.15rem', textAlign: 'center' }}>
+          <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '0.85rem 1.15rem', textAlign: 'center', minWidth: '120px' }}>
             <span style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block' }}>Avg Mood Score</span>
-            <strong style={{ fontSize: '1.4rem', color: '#38bdf8', fontWeight: 800 }}>{avgScore}/10</strong>
+            {avgScore !== null ? (
+              <strong style={{ fontSize: '1.4rem', color: '#38bdf8', fontWeight: 800 }}>{avgScore}/10</strong>
+            ) : (
+              <span style={{ fontSize: '0.82rem', color: '#475569', fontStyle: 'italic' }}>Log a mood first</span>
+            )}
           </div>
 
           <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '0.85rem 1.15rem', textAlign: 'center' }}>
@@ -131,9 +142,13 @@ export default function HomePage({ currentUser, onSelectModule, onOpenCrisisModa
             </strong>
           </div>
 
-          <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '0.85rem 1.15rem', textAlign: 'center' }}>
+          <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '0.85rem 1.15rem', textAlign: 'center', minWidth: '120px' }}>
             <span style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block' }}>RAG Guardrails</span>
-            <strong style={{ fontSize: '1.4rem', color: '#c084fc', fontWeight: 800 }}>100% Pass</strong>
+            {guardrailLabel !== null ? (
+              <strong style={{ fontSize: '1.4rem', color: '#c084fc', fontWeight: 800 }}>{guardrailLabel}</strong>
+            ) : (
+              <span style={{ fontSize: '0.82rem', color: '#475569', fontStyle: 'italic' }}>Run Red-Team tests</span>
+            )}
           </div>
 
         </div>

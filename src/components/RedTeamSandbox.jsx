@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { TestTube2, Play, CheckCircle2, XCircle, Terminal, Cpu, ShieldAlert } from 'lucide-react';
 import { RED_TEAM_SUITES } from '../data/redTeamScenarios';
 import { SafetyPipeline } from '../services/safetyPipeline';
+import { StorageService } from '../services/storageService';
 
 export default function RedTeamSandbox() {
   const [testResults, setTestResults] = useState({});
@@ -36,6 +37,12 @@ export default function RedTeamSandbox() {
       });
     });
     setTestResults(newResults);
+    // Persist real guardrail stats
+    const allVals = Object.values(newResults);
+    StorageService.saveGuardrailStats({
+      total: allVals.length,
+      passed: allVals.filter(r => r.passed).length
+    });
   };
 
   const handleRunCustom = () => {

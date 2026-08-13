@@ -11,7 +11,8 @@ const STORAGE_KEYS = {
   CBT_RECORDS: 'auramind_cbt_records',
   MEMORY_SUMMARIES: 'auramind_memory_summaries',
   SETTINGS: 'auramind_settings',
-  TRUSTED_CONTACTS: 'auramind_trusted_contacts'
+  TRUSTED_CONTACTS: 'auramind_trusted_contacts',
+  GUARDRAIL_STATS: 'auramind_guardrail_stats'
 };
 
 const DEFAULT_SECRET = 'auramind_local_secure_key_2026';
@@ -53,12 +54,8 @@ export class StorageService {
 
   // --- MOOD LOGS ---
   static getMoodLogs() {
-    return this.get(STORAGE_KEYS.MOOD_LOGS) || [
-      { id: 'm1', date: '2026-08-08', valence: 'good', score: 8, tags: ['Work', 'Sleep'], note: 'Good productive day.' },
-      { id: 'm2', date: '2026-08-09', valence: 'anxious', score: 4, tags: ['Work', 'Stress'], note: 'Felt overwhelmed by deadlines.' },
-      { id: 'm3', date: '2026-08-10', valence: 'neutral', score: 6, tags: ['Health'], note: 'Did 4-7-8 breathing in afternoon.' },
-      { id: 'm4', date: '2026-08-11', valence: 'great', score: 9, tags: ['Exercise', 'Family'], note: 'Felt calm and refreshed.' }
-    ];
+    // Return only real user-logged data — no demo defaults
+    return this.get(STORAGE_KEYS.MOOD_LOGS) || [];
   }
 
   static saveMoodLog(log) {
@@ -93,10 +90,8 @@ export class StorageService {
 
   // --- MEMORY SUMMARIES ---
   static getMemorySummaries() {
-    return this.get(STORAGE_KEYS.MEMORY_SUMMARIES) || [
-      { id: 'mem-1', text: 'Responds positively to 4-7-8 breathing exercises during work stress.', createdAt: '2026-08-09' },
-      { id: 'mem-2', text: 'Identified all-or-nothing thinking pattern around project deadlines.', createdAt: '2026-08-10' }
-    ];
+    // Return only real user-created memory items — no demo defaults
+    return this.get(STORAGE_KEYS.MEMORY_SUMMARIES) || [];
   }
 
   static saveMemorySummary(text) {
@@ -120,15 +115,26 @@ export class StorageService {
   // --- TRUSTED CONTACTS ---
   static getTrustedContacts() {
     return this.get(STORAGE_KEYS.TRUSTED_CONTACTS) || {
-      name: "Dr. Sarah Jenkins (Therapist) / Alex (Partner)",
-      phone: "+1 (555) 019-2834",
-      email: "contact@support.org"
+      name: "",
+      phone: "",
+      email: ""
     };
   }
 
   static saveTrustedContacts(contacts) {
     this.set(STORAGE_KEYS.TRUSTED_CONTACTS, contacts);
     return contacts;
+  }
+
+  // --- GUARDRAIL STATS (from Red-Team Lab runs) ---
+  static getGuardrailStats() {
+    return this.get(STORAGE_KEYS.GUARDRAIL_STATS) || null; // null = no tests run yet
+  }
+
+  static saveGuardrailStats({ total, passed }) {
+    const stats = { total, passed, updatedAt: new Date().toISOString() };
+    this.set(STORAGE_KEYS.GUARDRAIL_STATS, stats);
+    return stats;
   }
 
   // --- DATA CONTROL ---
